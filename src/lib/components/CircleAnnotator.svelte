@@ -15,35 +15,109 @@
 	let estimatedCircle: {center: {x: number, y: number}, radius: number} | null = null;
 	let backgroundImage: HTMLImageElement | null = null;
 	let canvasInitialized = false;
+	let lastImageUrl = '';  // Track image changes properly
 
 	// ===== DRAWING FUNCTIONS =====
-	function startDrawing(event: MouseEvent) {
-		if (!canvas || !ctx) return;
-		
-		isDrawing = true;
+	function getEventCoords(event: MouseEvent | Touch, canvas: HTMLCanvasElement) {
 		const rect = canvas.getBoundingClientRect();
-		const x = event.clientX - rect.left;
-		const y = event.clientY - rect.top;
+		const scaleX = canvas.width / rect.width;
+		const scaleY = canvas.height / rect.height;
 		
-		currentLine = {
-			start: {x, y},
-			end: {x, y}
+		return {
+			x: (event.clientX - rect.left) * scaleX,
+			y: (event.clientY - rect.top) * scaleY
 		};
 	}
 
+	function startDrawing(event: MouseEvent) {
+		if (!canvas || !ctx) {
+			console.log('Start drawing blocked: no canvas or context');
+			return;
+		}
+		
+		if (!canvasInitialized || !backgroundImage) {
+			console.log('Canvas not ready for drawing:', { 
+				canvasInitialized, 
+				backgroundImage: !!backgroundImage 
+			});
+			return;
+		}
+		
+		const coords = getEventCoords(event, canvas);
+		
+		isDrawing = true;
+		currentLine = {
+			start: coords,
+			end: coords
+		};
+		
+		console.log('✅ Started drawing at:', coords.x, coords.y);
+	}
+
 	function draw(event: MouseEvent) {
-		if (!isDrawing || !currentLine || !ctx || !canvas) return;
+		if (!isDrawing) return;
 		
-		const rect = canvas.getBoundingClientRect();
-		const x = event.clientX - rect.left;
-		const y = event.clientY - rect.top;
+		if (!currentLine || !ctx || !canvas) {
+			console.log('Draw blocked while drawing:', { currentLine: !!currentLine, ctx: !!ctx, canvas: !!canvas });
+			return;
+		}
 		
-		currentLine.end = {x, y};
+		const coords = getEventCoords(event, canvas);
+		currentLine.end = coords;
+		
 		redrawCanvas();
 	}
 
+	// Touch event handlers with proper coordinate calculation
+	function handleTouchStart(event: TouchEvent) {
+		event.preventDefault();
+		if (event.touches.length === 1) {
+			const touch = event.touches[0];
+			const coords = getEventCoords(touch, canvas);
+			
+			if (!canvas || !ctx || !canvasInitialized || !backgroundImage) {
+				console.log('Touch start - canvas not ready');
+				return;
+			}
+			
+			isDrawing = true;
+			currentLine = {
+				start: coords,
+				end: coords
+			};
+			
+			console.log('✅ Touch started at:', coords.x, coords.y);
+		}
+	}
+
+	function handleTouchMove(event: TouchEvent) {
+		event.preventDefault();
+		if (!isDrawing || event.touches.length !== 1) return;
+		
+		if (!currentLine || !ctx || !canvas) {
+			console.log('Touch move blocked');
+			return;
+		}
+		
+		const touch = event.touches[0];
+		const coords = getEventCoords(touch, canvas);
+		currentLine.end = coords;
+		
+		console.log('Touch move to:', coords.x, coords.y);
+		redrawCanvas();
+	}
+
+	function handleTouchEnd(event: TouchEvent) {
+		event.preventDefault();
+		stopDrawing();
+	}
+
 	function stopDrawing() {
+		console.log('Stop drawing called, isDrawing:', isDrawing, 'currentLine:', !!currentLine); // Debug
+		
 		if (!isDrawing || !currentLine) return;
+		
+		console.log('Finished drawing line:', currentLine); // Debug
 		
 		isDrawing = false;
 		lines.push({...currentLine});
@@ -93,7 +167,7 @@
 			ctx!.fill();
 		});
 		
-		// Draw current line being drawn
+		// Draw current line being drawn (this was the missing piece!)
 		if (currentLine && isDrawing) {
 			ctx.strokeStyle = '#ff8888';
 			ctx.lineWidth = 2;
@@ -101,6 +175,12 @@
 			ctx.moveTo(currentLine.start.x, currentLine.start.y);
 			ctx.lineTo(currentLine.end.x, currentLine.end.y);
 			ctx.stroke();
+			
+			// Draw current endpoint
+			ctx.fillStyle = '#ff8888';
+			ctx.beginPath();
+			ctx.arc(currentLine.end.x, currentLine.end.y, 3, 0, 2 * Math.PI);
+			ctx.fill();
 		}
 		
 		// Draw estimated circle
@@ -175,30 +255,58 @@
 	}
 
 	function initCanvas() {
-		if (!canvas || !capturedImage || canvasInitialized) return;
+		if (!canvas || !capturedImage) {
+			console.log('Init blocked: no canvas or image');
+			return;
+		}
+		
+		if (canvasInitialized && lastImageUrl === capturedImage) {
+			console.log('Canvas already initialized for this image');
+			return;
+		}
+		
+		console.log('Starting canvas initialization...');
 		
 		ctx = canvas.getContext('2d');
-		if (!ctx) return;
+		if (!ctx) {
+			console.log('Failed to get canvas context');
+			return;
+		}
 		
-		// Pre-load the background image
-		backgroundImage = new Image();
-		backgroundImage.onload = () => {
+		// Create a new image instance for this initialization
+		const img = new Image();
+		img.onload = () => {
+			console.log('Background image loaded successfully');
+			
+			// Double-check we still have the canvas and this is still the current image
+			if (!canvas || !capturedImage || img.src !== capturedImage) {
+				console.log('Canvas state changed during image load, aborting');
+				return;
+			}
+			
 			// Set canvas size to match the image aspect ratio
 			const maxWidth = 600;
-			const aspectRatio = backgroundImage!.height / backgroundImage!.width;
+			const aspectRatio = img.height / img.width;
 			
 			canvas.width = maxWidth;
 			canvas.height = maxWidth * aspectRatio;
 			
-			canvasInitialized = true;
+			console.log('Canvas sized:', canvas.width, 'x', canvas.height);
 			
-			// Now we can safely draw without flashing
+			// Store the loaded image and mark as initialized
+			backgroundImage = img;
+			canvasInitialized = true;
+			lastImageUrl = capturedImage;
+			
+			console.log('✅ Canvas initialization complete!');
+			
+			// Now we can safely draw
 			redrawCanvas();
 		};
-		backgroundImage.onerror = () => {
-			console.error('Failed to load background image for annotator');
+		img.onerror = (error) => {
+			console.error('Failed to load background image for annotator:', error);
 		};
-		backgroundImage.src = capturedImage;
+		img.src = capturedImage;
 	}
 
 	function clearLines() {
@@ -209,13 +317,74 @@
 		redrawCanvas();
 	}
 
-	// Reset canvas when image changes
-	$: if (capturedImage) {
+	// Debug function to test canvas drawing
+	function testCanvas() {
+		console.log('=== CANVAS TEST ===');
+		console.log('Canvas:', !!canvas);
+		console.log('Context:', !!ctx);
+		console.log('Initialized:', canvasInitialized);
+		console.log('Background image:', !!backgroundImage);
+		console.log('Canvas dimensions:', canvas?.width, 'x', canvas?.height);
+		
+		if (!ctx || !canvas) {
+			console.log('❌ Canvas/context not available for test');
+			return;
+		}
+		
+		if (!canvasInitialized) {
+			console.log('⚠️ Canvas not initialized, trying to initialize...');
+			initCanvas();
+			return;
+		}
+		
+		console.log('✅ Drawing test line...');
+		
+		// Save context state
+		ctx.save();
+		
+		// Draw test line
+		ctx.strokeStyle = '#ff0000';
+		ctx.lineWidth = 5;
+		ctx.beginPath();
+		ctx.moveTo(50, 50);
+		ctx.lineTo(150, 150);
+		ctx.stroke();
+		
+		// Draw test circle
+		ctx.strokeStyle = '#00ff00';
+		ctx.lineWidth = 3;
+		ctx.beginPath();
+		ctx.arc(100, 100, 30, 0, 2 * Math.PI);
+		ctx.stroke();
+		
+		// Restore context state
+		ctx.restore();
+		
+		console.log('✅ Test shapes drawn!');
+	}
+
+	// Only reset when the image URL actually changes
+	$: if (capturedImage && capturedImage !== lastImageUrl) {
+		console.log('📸 Image changed from', lastImageUrl ? 'previous' : 'none', 'to new image');
+		resetCanvasForNewImage();
+	}
+	
+	// Initialize canvas when it becomes available
+	$: if (canvas && capturedImage && !canvasInitialized) {
+		console.log('🎨 Canvas ready, initializing...');
+		initCanvas();
+	}
+
+	function resetCanvasForNewImage() {
+		console.log('Resetting canvas for new image...');
 		canvasInitialized = false;
 		backgroundImage = null;
 		lines = [];
 		currentLine = null;
 		estimatedCircle = null;
+		isDrawing = false;
+		
+		// Initialize for the new image
 		if (canvas) {
 			initCanvas();
 		}
@@ -236,6 +405,10 @@
 			on:mousemove={draw}
 			on:mouseup={stopDrawing}
 			on:mouseleave={stopDrawing}
+			on:touchstart={handleTouchStart}
+			on:touchmove={handleTouchMove}
+			on:touchend={handleTouchEnd}
+			on:touchcancel={handleTouchEnd}
 			class="annotation-canvas"
 		></canvas>
 	</div>
@@ -243,6 +416,10 @@
 	<div class="annotation-controls">
 		<button on:click={clearLines} class="control-button clear-button">
 			🗑️ Clear Lines
+		</button>
+		
+		<button on:click={testCanvas} class="control-button test-button">
+			🧪 Test Canvas
 		</button>
 		
 		<div class="status">
@@ -283,6 +460,11 @@
 		border-radius: 4px;
 		cursor: crosshair;
 		max-width: 100%;
+		display: block;
+		touch-action: none; /* Prevent scrolling and zooming on touch */
+		user-select: none; /* Prevent text selection */
+		-webkit-user-select: none;
+		-webkit-touch-callout: none; /* Prevent iOS callout menu */
 	}
 
 	.annotation-controls {
@@ -309,6 +491,14 @@
 
 	.clear-button {
 		background: #e74c3c;
+	}
+
+	.test-button {
+		background: #9b59b6;
+	}
+
+	.test-button:hover {
+		background: #8e44ad;
 	}
 
 	.status {
