@@ -1,5 +1,6 @@
-<!-- src/lib/components/ImageCropper.svelte -->
+<!-- src/lib/components/ImageCropper.svelte (Final Fix) -->
 <script lang="ts">
+	import { afterUpdate } from 'svelte';
 	import { imageAnalysisStore, updateCroppedImage } from '$lib/stores/imageAnalysis';
 
 	// ===== STATE =====
@@ -11,13 +12,20 @@
 	let isDrawing = false;
 	let cropRect = { startX: 0, startY: 0, endX: 0, endY: 0 };
 	let hasSelection = false;
+	let lastLoadedUrl: string | null = null; // Guard to prevent re-initialization
 
 	// ===== LIFECYCLE & INITIALIZATION =====
-	$: if (capturedImage && canvas) {
-		loadImageAndDraw(capturedImage);
-	}
+	// FIX: Use `afterUpdate` to avoid reactive loops.
+	// This code now runs only after Svelte has updated the DOM.
+	afterUpdate(() => {
+		// We only want to re-initialize the canvas if the image URL has actually changed.
+		if (capturedImage && capturedImage !== lastLoadedUrl) {
+			loadImageAndDraw(capturedImage);
+		}
+	});
 
 	function loadImageAndDraw(imageUrl: string) {
+		lastLoadedUrl = imageUrl; // Mark this URL as loaded
 		ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
@@ -28,27 +36,31 @@
 			canvas.width = 800;
 			canvas.height = canvas.width * aspectRatio;
 			ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+			// Reset component state for the new image
+			hasSelection = false;
+			isDrawing = false;
 		};
 		img.onerror = () => console.error('ImageCropper failed to load the image.');
 		img.src = imageUrl;
 	}
 
-	function redrawCanvasWithSelection() {
+	function redrawCanvas() {
 		if (!ctx || !canvas || !backgroundImage) return;
 
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
 
-		if (isDrawing || hasSelection) {
-			const { startX, startY, endX, endY } = cropRect;
-			const width = endX - startX;
-			const height = endY - startY;
+		if (hasSelection || isDrawing) {
+			const x = Math.min(cropRect.startX, cropRect.endX);
+			const y = Math.min(cropRect.startY, cropRect.endY);
+			const width = Math.abs(cropRect.endX - cropRect.startX);
+			const height = Math.abs(cropRect.endY - cropRect.startY);
 
 			ctx.fillStyle = 'rgba(0, 100, 255, 0.3)';
 			ctx.strokeStyle = '#0064ff';
 			ctx.lineWidth = 2;
-			ctx.fillRect(startX, startY, width, height);
-			ctx.strokeRect(startX, startY, width, height);
+			ctx.fillRect(x, y, width, height);
+			ctx.strokeRect(x, y, width, height);
 		}
 	}
 
@@ -57,10 +69,7 @@
 		const rect = canvas.getBoundingClientRect();
 		const scaleX = canvas.width / rect.width;
 		const scaleY = canvas.height / rect.height;
-		return {
-			x: (event.clientX - rect.left) * scaleX,
-			y: (event.clientY - rect.top) * scaleY
-		};
+		return { x: (event.clientX - rect.left) * scaleX, y: (event.clientY - rect.top) * scaleY };
 	}
 
 	function handleStart(event: MouseEvent | TouchEvent) {
@@ -80,22 +89,22 @@
 		const coords = getEventCoords(touch);
 		cropRect.endX = coords.x;
 		cropRect.endY = coords.y;
-		redrawCanvasWithSelection();
+		redrawCanvas();
 	}
 
 	function handleEnd() {
 		if (!isDrawing) return;
 		isDrawing = false;
-		if (Math.abs(cropRect.endX - cropRect.startX) > 10) {
+		if (Math.abs(cropRect.endX - cropRect.startX) > 10 && Math.abs(cropRect.endY - cropRect.startY) > 10) {
 			hasSelection = true;
 		}
-		redrawCanvasWithSelection();
+		redrawCanvas();
 	}
 
 	// ===== WORKFLOW ACTIONS =====
 	function confirmCrop() {
 		if (!backgroundImage || !hasSelection) return;
-
+		
 		const x = Math.min(cropRect.startX, cropRect.endX);
 		const y = Math.min(cropRect.startY, cropRect.endY);
 		const width = Math.abs(cropRect.endX - cropRect.startX);

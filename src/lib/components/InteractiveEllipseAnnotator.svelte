@@ -12,17 +12,23 @@
 	let ctx: CanvasRenderingContext2D | null;
 	let backgroundImage: HTMLImageElement | null;
 	let ellipse: Ellipse;
+
+	// Interaction state
 	let isDragging = false;
 	let activeHandle: 'center' | 'rx' | 'ry' | 'rotate' | null = null;
 	let dragStart = { x: 0, y: 0 };
 	let initialEllipse: Ellipse;
 
+	// FIX: This guard prevents the initialization from running on every state change.
+	let lastLoadedUrl: string | null = null;
+
 	// ===== LIFECYCLE & INITIALIZATION =====
-	$: if (annotationImage && canvas) {
-		loadImageAndDraw(annotationImage);
+	$: if (annotationImage && canvas && annotationImage !== lastLoadedUrl) {
+		loadImageAndInitialize(annotationImage);
 	}
 
-	function loadImageAndDraw(imageUrl: string) {
+	function loadImageAndInitialize(imageUrl: string) {
+		lastLoadedUrl = imageUrl; // Mark this image as loaded
 		ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
@@ -33,6 +39,8 @@
 			canvas.width = 800;
 			canvas.height = canvas.width * aspectRatio;
 
+			// This is the initialization that was causing the "snap-back".
+			// It will now only run once per new image.
 			ellipse = {
 				cx: canvas.width / 2, cy: canvas.height / 2,
 				rx: canvas.width / 4, ry: canvas.width / 4,
@@ -46,7 +54,7 @@
 
 	// ===== DRAWING LOGIC =====
 	function redrawCanvas() {
-		if (!ctx || !canvas || !backgroundImage) return;
+		if (!ctx || !canvas || !backgroundImage || !ellipse) return;
 
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
@@ -104,7 +112,7 @@
 				isDragging = true;
 				activeHandle = name as typeof activeHandle;
 				dragStart = coords;
-				initialEllipse = { ...ellipse };
+				initialEllipse = { ...ellipse }; // Capture state at the beginning of the drag
 				return;
 			}
 		}
@@ -126,10 +134,10 @@
 			const currentAngle = Math.atan2(coords.y - initialEllipse.cy, coords.x - initialEllipse.cx);
 			ellipse.angle = initialEllipse.angle + (currentAngle - initialAngle);
 		} else {
-			const cosA = Math.cos(-ellipse.angle);
-			const sinA = Math.sin(-ellipse.angle);
-			const localX = (coords.x - ellipse.cx) * cosA - (coords.y - ellipse.cy) * sinA;
-			const localY = (coords.x - ellipse.cx) * sinA + (coords.y - ellipse.cy) * cosA;
+			const cosA = Math.cos(-initialEllipse.angle);
+			const sinA = Math.sin(-initialEllipse.angle);
+			const localX = (coords.x - initialEllipse.cx) * cosA - (coords.y - initialEllipse.cy) * sinA;
+			const localY = (coords.x - initialEllipse.cx) * sinA + (coords.y - initialEllipse.cy) * cosA;
 
 			if (activeHandle === 'rx') {
 				ellipse.rx = Math.max(5, Math.abs(localX));
