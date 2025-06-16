@@ -4,7 +4,8 @@
 
 	$: clipDiameter = $imageAnalysisStore.clipDiameter;
 	
-	let diameterInput = clipDiameter.toString();
+	// Initialize with a safe default, then sync with store
+	let diameterInput = '25.0';
 
 	function handleDiameterChange() {
 		const newDiameter = parseFloat(diameterInput);
@@ -14,7 +15,7 @@
 	}
 
 	// Update local input when store changes (e.g., from localStorage)
-	$: if (clipDiameter !== parseFloat(diameterInput)) {
+	$: if (clipDiameter && clipDiameter !== parseFloat(diameterInput)) {
 		diameterInput = clipDiameter.toString();
 	}
 </script>

@@ -4,9 +4,6 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [sveltekit()],
-	optimizeDeps: {
-		exclude: ['pyodide']
-	},
 	server: {
 		fs: {
 			allow: ['..']

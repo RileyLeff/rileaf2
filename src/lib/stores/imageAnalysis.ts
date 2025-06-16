@@ -1,5 +1,6 @@
 // src/lib/stores/imageAnalysis.ts
 import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
 
 export interface ImageAnalysisState {
 	capturedImage: string | null;
@@ -10,7 +11,12 @@ export interface ImageAnalysisState {
 		v: number;
 		tolerance: number;
 	} | null;
-	processingResults: string;
+	circlePriors: {
+		center: [number, number];
+		radius: number;
+		confidence: number;
+	} | null;
+	processingResults: string | null;
 	isProcessing: boolean;
 }
 
@@ -18,7 +24,8 @@ const initialState: ImageAnalysisState = {
 	capturedImage: null,
 	clipDiameter: 25.0, // Default 25mm diameter
 	sampledColor: null,
-	processingResults: '',
+	circlePriors: null,
+	processingResults: null,
 	isProcessing: false
 };
 
@@ -28,7 +35,11 @@ export const imageAnalysisStore = writable<ImageAnalysisState>(initialState);
 export const updateCapturedImage = (image: string | null) => {
 	imageAnalysisStore.update(state => ({
 		...state,
-		capturedImage: image
+		capturedImage: image,
+		// Clear previous analysis when new image is captured
+		processingResults: null,
+		circlePriors: null,
+		sampledColor: null
 	}));
 };
 
@@ -38,7 +49,7 @@ export const updateClipDiameter = (diameter: number) => {
 		clipDiameter: diameter
 	}));
 	// Save to localStorage for persistence
-	if (typeof localStorage !== 'undefined') {
+	if (browser) {
 		localStorage.setItem('rileaf2-clip-diameter', diameter.toString());
 	}
 };
@@ -47,6 +58,13 @@ export const updateSampledColor = (color: ImageAnalysisState['sampledColor']) =>
 	imageAnalysisStore.update(state => ({
 		...state,
 		sampledColor: color
+	}));
+};
+
+export const updateCirclePriors = (priors: ImageAnalysisState['circlePriors']) => {
+	imageAnalysisStore.update(state => ({
+		...state,
+		circlePriors: priors
 	}));
 };
 
@@ -59,7 +77,7 @@ export const updateProcessingResults = (results: string, isProcessing: boolean =
 };
 
 // Load saved diameter from localStorage on initialization
-if (typeof localStorage !== 'undefined') {
+if (browser) {
 	const savedDiameter = localStorage.getItem('rileaf2-clip-diameter');
 	if (savedDiameter) {
 		const diameter = parseFloat(savedDiameter);
