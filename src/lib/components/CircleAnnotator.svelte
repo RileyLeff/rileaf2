@@ -13,6 +13,8 @@
 	let lines: Array<{start: {x: number, y: number}, end: {x: number, y: number}}> = [];
 	let currentLine: {start: {x: number, y: number}, end: {x: number, y: number}} | null = null;
 	let estimatedCircle: {center: {x: number, y: number}, radius: number} | null = null;
+	let backgroundImage: HTMLImageElement | null = null;
+	let canvasInitialized = false;
 
 	// ===== DRAWING FUNCTIONS =====
 	function startDrawing(event: MouseEvent) {
@@ -56,22 +58,16 @@
 	}
 
 	function redrawCanvas() {
-		if (!ctx || !canvas) return;
+		if (!ctx || !canvas || !backgroundImage) return;
 		
 		// Clear canvas
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		
-		// Draw the captured image
-		if (capturedImage) {
-			const img = new Image();
-			img.onload = () => {
-				ctx!.drawImage(img, 0, 0, canvas.width, canvas.height);
-				drawAnnotations();
-			};
-			img.src = capturedImage;
-		} else {
-			drawAnnotations();
-		}
+		// Draw the background image immediately (no async loading)
+		ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+		
+		// Draw annotations on top
+		drawAnnotations();
 	}
 
 	function drawAnnotations() {
@@ -178,6 +174,33 @@
 		return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
 	}
 
+	function initCanvas() {
+		if (!canvas || !capturedImage || canvasInitialized) return;
+		
+		ctx = canvas.getContext('2d');
+		if (!ctx) return;
+		
+		// Pre-load the background image
+		backgroundImage = new Image();
+		backgroundImage.onload = () => {
+			// Set canvas size to match the image aspect ratio
+			const maxWidth = 600;
+			const aspectRatio = backgroundImage!.height / backgroundImage!.width;
+			
+			canvas.width = maxWidth;
+			canvas.height = maxWidth * aspectRatio;
+			
+			canvasInitialized = true;
+			
+			// Now we can safely draw without flashing
+			redrawCanvas();
+		};
+		backgroundImage.onerror = () => {
+			console.error('Failed to load background image for annotator');
+		};
+		backgroundImage.src = capturedImage;
+	}
+
 	function clearLines() {
 		lines = [];
 		currentLine = null;
@@ -186,30 +209,16 @@
 		redrawCanvas();
 	}
 
-	function initCanvas() {
-		if (!canvas) return;
-		
-		ctx = canvas.getContext('2d');
-		
-		// Set canvas size to match the captured image aspect ratio
-		if (capturedImage) {
-			const img = new Image();
-			img.onload = () => {
-				const maxWidth = 600;
-				const aspectRatio = img.height / img.width;
-				
-				canvas.width = maxWidth;
-				canvas.height = maxWidth * aspectRatio;
-				
-				redrawCanvas();
-			};
-			img.src = capturedImage;
+	// Reset canvas when image changes
+	$: if (capturedImage) {
+		canvasInitialized = false;
+		backgroundImage = null;
+		lines = [];
+		currentLine = null;
+		estimatedCircle = null;
+		if (canvas) {
+			initCanvas();
 		}
-	}
-
-	// Initialize canvas when component mounts and image is available
-	$: if (canvas && capturedImage) {
-		initCanvas();
 	}
 </script>
 
