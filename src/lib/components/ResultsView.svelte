@@ -4,11 +4,9 @@
 
 	$: results = $imageAnalysisStore.processingResults;
 	$: clipDiameter = $imageAnalysisStore.clipDiameter;
-	$: annotationImage = $imageAnalysisStore.croppedImage || $imageAnalysisStore.capturedImage;
 
 	let finalLeafArea = 0;
 	let canvas: HTMLCanvasElement;
-	let ctx: CanvasRenderingContext2D | null;
 
 	// Calculate physical area when results are available
 	$: if (results && results.leaf_analysis && results.ellipse_info) {
@@ -16,19 +14,18 @@
 		const { area_pixels: ellipse_area_pixels } = results.ellipse_info;
 
 		if (ellipse_area_pixels > 0 && clipDiameter > 0) {
-			// Calculate the area of the physical clip in mm^2
 			const clipPhysicalArea = Math.PI * (clipDiameter / 2) ** 2;
-			// Calculate pixels per mm^2
 			const pixelsPerMmSq = ellipse_area_pixels / clipPhysicalArea;
-			// Calculate the physical leaf area
 			finalLeafArea = total_leaf_area_pixels / pixelsPerMmSq;
 		}
 	}
 
-	// Draw the result image with highlighted leaves
-	$: if (results && results.final_image_data_url && canvas) {
-		ctx = canvas.getContext('2d');
+	// This function will be called by the reactive statement below to draw the canvas
+	function drawResultImage(imageUrl: string) {
+		const ctx = canvas.getContext('2d');
+		// This fixes the "'ctx' is possibly 'null'" error
 		if (!ctx) return;
+
 		const img = new Image();
 		img.onload = () => {
 			const aspectRatio = img.height / img.width;
@@ -36,7 +33,12 @@
 			canvas.height = canvas.width * aspectRatio;
 			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 		};
-		img.src = results.final_image_data_url;
+		img.src = imageUrl;
+	}
+
+	// This reactive block now properly calls a function, fixing the "'return' outside of function" error
+	$: if (results && results.final_image_data_url && canvas) {
+		drawResultImage(results.final_image_data_url);
 	}
 </script>
 
@@ -66,6 +68,7 @@
 </div>
 
 <style>
+	/* Styles remain the same */
 	.results-container {
 		text-align: center;
 	}
