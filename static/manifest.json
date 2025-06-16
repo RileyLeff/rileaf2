@@ -1,0 +1,17 @@
+{
+	"name": "RiLeaf2",
+	"short_name": "RiLeaf2",
+	"description": "Leaf area detection app",
+	"start_url": "/",
+	"display": "standalone",
+	"background_color": "#ffffff",
+	"theme_color": "#2e7d32",
+	"icons": [
+		{
+			"src": "/favicon.png",
+			"sizes": "48x48 72x72 96x96 128x128 256x256",
+			"type": "image/png",
+			"purpose": "any maskable"
+		}
+	]
+}

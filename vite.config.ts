@@ -4,6 +4,17 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [sveltekit()],
+	optimizeDeps: {
+		exclude: ['pyodide']
+	},
+	server: {
+		fs: {
+			allow: ['..']
+		},
+		allowedHosts: [
+			'clean-marlin-rapidly.ngrok-free.app'
+		]
+	},
 	test: {
 		projects: [
 			{
