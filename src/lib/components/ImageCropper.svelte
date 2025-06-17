@@ -1,9 +1,8 @@
-<!-- src/lib/components/ImageCropper.svelte (Final Fix) -->
+<!-- src/lib/components/ImageCropper.svelte -->
 <script lang="ts">
 	import { afterUpdate } from 'svelte';
 	import { imageAnalysisStore, updateCroppedImage } from '$lib/stores/imageAnalysis';
 
-	// ===== STATE =====
 	$: capturedImage = $imageAnalysisStore.capturedImage;
 
 	let canvas: HTMLCanvasElement;
@@ -12,20 +11,16 @@
 	let isDrawing = false;
 	let cropRect = { startX: 0, startY: 0, endX: 0, endY: 0 };
 	let hasSelection = false;
-	let lastLoadedUrl: string | null = null; // Guard to prevent re-initialization
+	let lastLoadedUrl: string | null = null;
 
-	// ===== LIFECYCLE & INITIALIZATION =====
-	// FIX: Use `afterUpdate` to avoid reactive loops.
-	// This code now runs only after Svelte has updated the DOM.
 	afterUpdate(() => {
-		// We only want to re-initialize the canvas if the image URL has actually changed.
 		if (capturedImage && capturedImage !== lastLoadedUrl) {
 			loadImageAndDraw(capturedImage);
 		}
 	});
 
 	function loadImageAndDraw(imageUrl: string) {
-		lastLoadedUrl = imageUrl; // Mark this URL as loaded
+		lastLoadedUrl = imageUrl;
 		ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
@@ -36,15 +31,14 @@
 			canvas.width = 800;
 			canvas.height = canvas.width * aspectRatio;
 			ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
-			// Reset component state for the new image
 			hasSelection = false;
 			isDrawing = false;
 		};
-		img.onerror = () => console.error('ImageCropper failed to load the image.');
 		img.src = imageUrl;
 	}
 
 	function redrawCanvas() {
+		// FIX: Add null check for ctx
 		if (!ctx || !canvas || !backgroundImage) return;
 
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -55,7 +49,6 @@
 			const y = Math.min(cropRect.startY, cropRect.endY);
 			const width = Math.abs(cropRect.endX - cropRect.startX);
 			const height = Math.abs(cropRect.endY - cropRect.startY);
-
 			ctx.fillStyle = 'rgba(0, 100, 255, 0.3)';
 			ctx.strokeStyle = '#0064ff';
 			ctx.lineWidth = 2;
@@ -64,7 +57,6 @@
 		}
 	}
 
-	// ===== INTERACTION HANDLERS =====
 	function getEventCoords(event: MouseEvent | Touch) {
 		const rect = canvas.getBoundingClientRect();
 		const scaleX = canvas.width / rect.width;
@@ -76,7 +68,6 @@
 		event.preventDefault();
 		const touch = 'touches' in event ? event.touches[0] : event;
 		const coords = getEventCoords(touch);
-
 		isDrawing = true;
 		hasSelection = false;
 		cropRect = { startX: coords.x, startY: coords.y, endX: coords.x, endY: coords.y };
@@ -101,7 +92,6 @@
 		redrawCanvas();
 	}
 
-	// ===== WORKFLOW ACTIONS =====
 	function confirmCrop() {
 		if (!backgroundImage || !hasSelection) return;
 		
@@ -109,21 +99,14 @@
 		const y = Math.min(cropRect.startY, cropRect.endY);
 		const width = Math.abs(cropRect.endX - cropRect.startX);
 		const height = Math.abs(cropRect.endY - cropRect.startY);
-
 		const scaleX = backgroundImage.naturalWidth / canvas.width;
 		const scaleY = backgroundImage.naturalHeight / canvas.height;
-
 		const cropCanvas = document.createElement('canvas');
 		cropCanvas.width = width * scaleX;
 		cropCanvas.height = height * scaleY;
 		const cropCtx = cropCanvas.getContext('2d');
-
 		if (cropCtx) {
-			cropCtx.drawImage(
-				backgroundImage,
-				x * scaleX, y * scaleY, width * scaleX, height * scaleY,
-				0, 0, width * scaleX, height * scaleY
-			);
+			cropCtx.drawImage(backgroundImage, x * scaleX, y * scaleY, width * scaleX, height * scaleY, 0, 0, width * scaleX, height * scaleY);
 			updateCroppedImage(cropCanvas.toDataURL('image/jpeg'));
 		}
 	}
@@ -137,29 +120,15 @@
 
 <div class="cropper-container">
 	<div class="canvas-wrapper">
-		<canvas
-			bind:this={canvas}
-			on:mousedown={handleStart}
-			on:mousemove={handleMove}
-			on:mouseup={handleEnd}
-			on:mouseleave={handleEnd}
-			on:touchstart|nonpassive={handleStart}
-			on:touchmove|nonpassive={handleMove}
-			on:touchend={handleEnd}
-			on:touchcancel={handleEnd}
-		></canvas>
+		<canvas bind:this={canvas} on:mousedown={handleStart} on:mousemove={handleMove} on:mouseup={handleEnd} on:mouseleave={handleEnd} on:touchstart|nonpassive={handleStart} on:touchmove|nonpassive={handleMove} on:touchend={handleEnd} on:touchcancel={handleEnd} ></canvas>
 	</div>
-
 	<div class="controls">
 		<button class="control-button skip" on:click={skipCrop}>Use Full Image</button>
-		<button class="control-button confirm" on:click={confirmCrop} disabled={!hasSelection}>
-			Confirm Crop
-		</button>
+		<button class="control-button confirm" on:click={confirmCrop} disabled={!hasSelection}> Confirm Crop </button>
 	</div>
 </div>
 
 <style>
-	/* Styles are unchanged */
 	.cropper-container { text-align: center; }
 	.canvas-wrapper { margin-bottom: 1rem; }
 	canvas { max-width: 100%; border-radius: 4px; border: 2px solid #ddd; cursor: crosshair; touch-action: none; }

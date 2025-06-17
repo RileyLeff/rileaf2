@@ -28,6 +28,7 @@
 </div>
 
 {#if $showSettings}
+	<!-- The outer div handles the click-away-to-close -->
 	<div
 		class="modal-overlay"
 		on:click={toggleSettings}
@@ -35,7 +36,7 @@
 		role="button"
 		tabindex="0"
 	>
-		<!-- FIX: Add tabindex="-1" to the dialog div and correct the role -->
+		<!-- FIX: The inner div gets the dialog role and tabindex="-1" -->
 		<div
 			class="modal-content"
 			on:click|stopPropagation
@@ -50,7 +51,6 @@
 {/if}
 
 <style>
-	/* Styles are unchanged */
 	.app-container { display: flex; flex-direction: column; height: 100vh; max-width: 800px; margin: 0 auto; background: #fff; }
 	.app-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; background: #2e7d32; color: white; flex-shrink: 0; }
 	h1 { font-size: 1.5rem; margin: 0; }

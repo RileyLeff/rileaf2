@@ -1,88 +1,87 @@
 <!-- src/lib/components/ImageProcessor.svelte -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	// UPDATED: Import the new `setProcessing` function
 	import { imageAnalysisStore, updateProcessingResults, updateAnnotation, setProcessing } from '$lib/stores/imageAnalysis';
-	import { analyzeLeafAreaInEllipse, refineEllipseSelection } from '$lib/opencv/detection';
+	import { analyzeLeafAreaInEllipse, getThresholdPreviewAndArea, refineEllipseSelection } from '$lib/opencv/detection';
+	import type { HSVRange, Annotation } from '$lib/stores/imageAnalysis';
 
+	declare const cv: any; // FIX: Declare cv to make TypeScript aware of it.
 	let opencvLoaded = false;
-	onMount(async () => {
-		if (opencvLoaded) return;
-		try {
-			if (document.getElementById('opencv-script')) {
-				opencvLoaded = true;
-				return;
-			}
-			const script = document.createElement('script');
-			script.id = 'opencv-script';
-			script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
-			script.async = true;
-			script.onload = () => {
-				const checkOpenCV = () => {
-					// @ts-ignore
-					if (typeof cv !== 'undefined' && cv.getBuildInformation) {
-						console.log('OpenCV.js loaded successfully');
-						opencvLoaded = true;
-					} else {
-						setTimeout(checkOpenCV, 100);
-					}
-				};
-				checkOpenCV();
-			};
-			document.head.appendChild(script);
-		} catch (error) {
-			console.error('Failed to load OpenCV:', error);
+
+	onMount(() => {
+		if (document.getElementById('opencv-script')) {
+			if(typeof cv !== 'undefined') opencvLoaded = true;
+			return;
 		}
+		const script = document.createElement('script');
+		script.id = 'opencv-script';
+		script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
+		script.async = true;
+		script.onload = () => {
+			const checkOpenCV = () => {
+				if (typeof cv !== 'undefined') {
+					console.log('OpenCV.js loaded successfully.');
+					opencvLoaded = true;
+				} else {
+					setTimeout(checkOpenCV, 100);
+				}
+			};
+			checkOpenCV();
+		};
+		document.head.appendChild(script);
 	});
 
-	// This function is for the final analysis
 	export function processImageWithAnnotation() {
 		const state = $imageAnalysisStore;
 		const imageToProcess = state.croppedImage || state.capturedImage;
-		const annotation = state.annotation;
+		// FIX: Add null check before proceeding
+		if (!imageToProcess || !state.annotation) {
+			alert('Cannot process: missing image or annotation.');
+			return;
+		}
+		const annotation: Annotation = state.annotation; // Create non-null version
 
-		if (!opencvLoaded) {
-			alert('OpenCV is still loading. Please wait a moment and try again.');
-			return;
-		}
-		if (!imageToProcess || !annotation) {
-			alert('Missing image or annotation data.');
-			return;
-		}
-		
-		// Set processing to true before starting
 		setProcessing(true);
-
 		const img = new Image();
 		img.onload = () => {
 			try {
-				const results = analyzeLeafAreaInEllipse(img, annotation);
-				// This will log results, stop processing, AND move to the results page
+				const results = analyzeLeafAreaInEllipse(img, annotation, state.hsvThresholds, state.chamberDiameter, state.clipDiameter);
 				updateProcessingResults(results);
 			} catch (error) {
 				updateProcessingResults({ error: `Processing error: ${error}` });
 			}
 		};
-		img.onerror = () => {
-			updateProcessingResults({ error: 'Failed to load image for processing.' });
-		};
 		img.src = imageToProcess;
 	}
 	
-	// This function is for the intermediate refinement step
+	export async function getThresholdPreview(hsv: HSVRange) {
+		const state = $imageAnalysisStore;
+		const imageToProcess = state.croppedImage || state.capturedImage;
+		// FIX: Add null check before proceeding
+		if (!opencvLoaded || !imageToProcess || !state.annotation) return null;
+		const annotation: Annotation = state.annotation; // Create non-null version
+		
+		return new Promise(resolve => {
+			const img = new Image();
+			img.onload = () => {
+				const previewData = getThresholdPreviewAndArea(img, annotation, hsv, state.chamberDiameter, state.clipDiameter);
+				resolve(previewData);
+			};
+			img.src = imageToProcess;
+		});
+	}
+	
 	export async function refineCurrentAnnotation() {
 		const state = $imageAnalysisStore;
 		const imageToProcess = state.croppedImage || state.capturedImage;
-		const currentAnnotation = state.annotation;
-
-		if (!opencvLoaded || !imageToProcess || !currentAnnotation) {
+		// FIX: Add null check before proceeding
+		if (!opencvLoaded || !imageToProcess || !state.annotation) {
 			alert('Cannot refine: Missing image or initial annotation.');
 			return;
 		}
+		const currentAnnotation: Annotation = state.annotation; // Create non-null version
 
-		// UPDATED: Use the safe function to show the spinner
 		setProcessing(true);
-
 		setTimeout(() => {
 			const img = new Image();
 			img.onload = () => {
@@ -92,7 +91,6 @@
 				} catch (error) {
 					console.error("Refinement failed:", error);
 				} finally {
-					// UPDATED: Use the safe function to hide the spinner
 					setProcessing(false);
 				}
 			};
