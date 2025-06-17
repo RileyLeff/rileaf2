@@ -1,38 +1,9 @@
-# sv
+# rileaf2
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+This is a small app that quickly finds the area of a leaf sample from an image. We take images of plants in a 3D printed clip with known dimensions.
 
-## Creating a project
+Conveniently, the clip slots directly into the licor 6800! This allows you to take leaf area measurements of small or weirdly-shaped leaves (e.g. pine needles) before your measurement.
 
-If you're seeing this, you've probably already done this step. Congrats!
+It can be installed as a progressive web app (PWA) on ios or android, so it can be used in remote field conditions.
 
-```bash
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```bash
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+It's close to done but not quite finished. We'll upload the 3D model for the clip soonish. Don't trust any measurements from this app unless the repo has been updated more recently than the contents of this version of the readme.
