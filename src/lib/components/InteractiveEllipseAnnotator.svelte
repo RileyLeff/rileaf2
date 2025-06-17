@@ -1,8 +1,8 @@
 <!-- src/lib/components/InteractiveEllipseAnnotator.svelte -->
 <script lang="ts">
-	import { imageAnalysisStore, updateAnnotation } from '$lib/stores/imageAnalysis';
+	// UPDATED: Import `setAppState` to control workflow transitions
+	import { imageAnalysisStore, updateAnnotation, setAppState } from '$lib/stores/imageAnalysis';
 	import type { Ellipse, Annotation } from '$lib/stores/imageAnalysis';
-	// REFACTORED: Import helper functions from our new utility module
 	import { drawEllipse, drawHandles, getEventCoords } from '$lib/utils/canvasUtils';
 
 	export let imageProcessor: any;
@@ -51,23 +51,21 @@
 		img.src = imageUrl;
 	}
 	
-	// ===== DRAWING LOGIC (Now simplified) =====
+	// ===== DRAWING LOGIC =====
 	function redrawCanvas() {
 		if (!ctx || !canvas || !backgroundImage || !ellipse) return;
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
-		// REFACTORED: Use imported helper functions
 		drawEllipse(ctx, ellipse);
 		drawHandles(ctx, ellipse);
 	}
 
-	// ===== INTERACTION LOGIC (Simplified handleStart) =====
+	// ===== INTERACTION LOGIC =====
 	function handleStart(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		const touch = 'touches' in event ? event.touches[0] : event;
-		const coords = getEventCoords(touch, canvas); // Uses helper
+		const coords = getEventCoords(touch, canvas);
 		
-		// Use a local copy of handle positions for hit-testing
 		const handles = {
 			center: { x: ellipse.cx, y: ellipse.cy },
 			rx: { x: ellipse.cx + ellipse.rx * Math.cos(ellipse.angle), y: ellipse.cy + ellipse.rx * Math.sin(ellipse.angle) },
@@ -121,11 +119,10 @@
 	}
 
 	// ===== WORKFLOW ACTIONS =====
-	function handleAnalyze() {
-		if (imageProcessor) {
-			saveAnnotation();
-			imageProcessor.processImageWithAnnotation();
-		}
+	// UPDATED: This function now transitions to the next step
+	function handleProceed() {
+		saveAnnotation();
+		setAppState('THRESHOLD');
 	}
 	
 	function handleRefine() {
@@ -161,7 +158,8 @@
 	</div>
 	<div class="controls">
 		<button class="control-button refine-button" on:click={handleRefine}> ✨ Refine Selection </button>
-		<button class="control-button analyze-button" on:click={handleAnalyze}> ✅ Analyze Leaf Area </button>
+		<!-- UPDATED: Button text and action -->
+		<button class="control-button proceed-button" on:click={handleProceed}> Select Leaf Color ➡️ </button>
 	</div>
 </div>
 
@@ -173,6 +171,7 @@
 	.control-button { padding: 12px 24px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
 	.refine-button { background-color: #f0f0f0; border: 1px solid #ccc; color: #333; }
 	.refine-button:hover { background-color: #e0e0e0; }
-	.analyze-button { background-color: #4caf50; color: white; }
-	.analyze-button:hover { background-color: #45a049; }
+	/* UPDATED: Renamed analyze-button to proceed-button */
+	.proceed-button { background-color: #2196f3; color: white; }
+	.proceed-button:hover { background-color: #1976d2; }
 </style>
