@@ -2,7 +2,7 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
-export type AppState = 'CAMERA' | 'CROP' | 'ANNOTATE' | 'RESULTS';
+export type AppState = 'CAMERA' | 'CROP' | 'ANNOTATE' | 'THRESHOLD' | 'RESULTS'; // Added THRESHOLD state
 
 export interface Ellipse {
 	cx: number;
@@ -12,13 +12,29 @@ export interface Ellipse {
 	angle: number; // in radians
 }
 
+export interface Annotation {
+	ellipse: Ellipse;
+	sourceDimensions: {
+		width: number;
+		height: number;
+	};
+}
+
+export interface HSVRange {
+    h: { min: number; max: number };
+    s: { min: number; max: number };
+    v: { min: number; max: number };
+}
+
 export interface ImageAnalysisState {
 	appState: AppState;
 	capturedImage: string | null;
-	croppedImage: string | null; // Store the cropped version separately
+	croppedImage: string | null;
 	clipDiameter: number;
-	ellipsePriors: Ellipse | null;
-	processingResults: any | null; // Store as object, not string
+	chamberDiameter: number; // NEW: Add chamber diameter
+	annotation: Annotation | null;
+    hsvThresholds: HSVRange; // NEW: Add HSV thresholds
+	processingResults: any | null;
 	isProcessing: boolean;
 }
 
@@ -26,28 +42,39 @@ const initialState: ImageAnalysisState = {
 	appState: 'CAMERA',
 	capturedImage: null,
 	croppedImage: null,
-	clipDiameter: 25.0, // Default 25mm diameter
-	ellipsePriors: null,
+	clipDiameter: 25.0,
+	chamberDiameter: 20.0, // NEW: Default chamber diameter
+	annotation: null,
+    // NEW: Default HSV range (a general bright green)
+    hsvThresholds: {
+        h: { min: 35, max: 90 },
+        s: { min: 40, max: 255 },
+        v: { min: 40, max: 255 }
+    },
 	processingResults: null,
 	isProcessing: false
 };
 
 export const imageAnalysisStore = writable<ImageAnalysisState>(initialState);
 
-// Helper functions for updating specific parts of the state
+// Helper functions
 
 export const setAppState = (appState: AppState) => {
 	imageAnalysisStore.update((state) => ({ ...state, appState }));
+};
+
+export const setProcessing = (isProcessing: boolean) => {
+	imageAnalysisStore.update((state) => ({ ...state, isProcessing }));
 };
 
 export const updateCapturedImage = (image: string | null) => {
 	imageAnalysisStore.update((state) => ({
 		...state,
 		capturedImage: image,
-		croppedImage: null, // Clear cropped image on new capture
+		croppedImage: null,
 		processingResults: null,
-		ellipsePriors: null,
-		appState: image ? 'CROP' : 'CAMERA' // Transition to CROP state
+		annotation: null,
+		appState: image ? 'CROP' : 'CAMERA'
 	}));
 };
 
@@ -60,47 +87,64 @@ export const updateCroppedImage = (image: string | null) => {
 };
 
 export const updateClipDiameter = (diameter: number) => {
-	imageAnalysisStore.update((state) => ({
-		...state,
-		clipDiameter: diameter
-	}));
-	// Save to localStorage for persistence
+	imageAnalysisStore.update((state) => ({ ...state, clipDiameter: diameter }));
 	if (browser) {
 		localStorage.setItem('rileaf2-clip-diameter', diameter.toString());
 	}
 };
 
-export const updateEllipsePriors = (priors: Ellipse | null) => {
+// NEW: Function to update chamber diameter
+export const updateChamberDiameter = (diameter: number) => {
+    imageAnalysisStore.update((state) => ({ ...state, chamberDiameter: diameter }));
+    if (browser) {
+        localStorage.setItem('rileaf2-chamber-diameter', diameter.toString());
+    }
+}
+
+export const updateAnnotation = (annotation: Annotation | null) => {
 	imageAnalysisStore.update((state) => ({
 		...state,
-		ellipsePriors: priors
+		annotation: annotation
 	}));
 };
 
-export const updateProcessingResults = (results: any, isProcessing: boolean = false) => {
+// NEW: Function to update HSV thresholds
+export const updateHsvThresholds = (thresholds: HSVRange) => {
+    imageAnalysisStore.update((state) => ({ ...state, hsvThresholds: thresholds }));
+};
+
+
+export const updateProcessingResults = (results: any) => {
 	imageAnalysisStore.update((state) => ({
 		...state,
 		processingResults: results,
-		isProcessing,
-		appState: isProcessing ? state.appState : 'RESULTS' // Move to results when done
+		isProcessing: false,
+		appState: 'RESULTS'
 	}));
 };
 
 export const resetWorkflow = () => {
 	imageAnalysisStore.update((state) => ({
 		...initialState,
-		clipDiameter: state.clipDiameter // Keep clip diameter
+		clipDiameter: state.clipDiameter, // Keep user-set diameters
+		chamberDiameter: state.chamberDiameter
 	}));
 };
 
-// Load saved diameter from localStorage on initialization
+// Load saved diameters from localStorage
 if (browser) {
-	const savedDiameter = localStorage.getItem('rileaf2-clip-diameter');
-	if (savedDiameter) {
-		const diameter = parseFloat(savedDiameter);
+	const savedClipDiameter = localStorage.getItem('rileaf2-clip-diameter');
+	if (savedClipDiameter) {
+		const diameter = parseFloat(savedClipDiameter);
 		if (!isNaN(diameter) && diameter > 0) {
-			// Use the store's update function to ensure consistency
 			imageAnalysisStore.update((state) => ({ ...state, clipDiameter: diameter }));
+		}
+	}
+    const savedChamberDiameter = localStorage.getItem('rileaf2-chamber-diameter');
+	if (savedChamberDiameter) {
+		const diameter = parseFloat(savedChamberDiameter);
+		if (!isNaN(diameter) && diameter > 0) {
+			imageAnalysisStore.update((state) => ({ ...state, chamberDiameter: diameter }));
 		}
 	}
 }

@@ -1,16 +1,14 @@
 <!-- src/lib/components/ImageProcessor.svelte -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { imageAnalysisStore, updateProcessingResults } from '$lib/stores/imageAnalysis';
-	import { analyzeLeafAreaInEllipse } from '$lib/opencv/detection';
-	import type { Ellipse } from '$lib/stores/imageAnalysis';
+	// UPDATED: Import the new `setProcessing` function
+	import { imageAnalysisStore, updateProcessingResults, updateAnnotation, setProcessing } from '$lib/stores/imageAnalysis';
+	import { analyzeLeafAreaInEllipse, refineEllipseSelection } from '$lib/opencv/detection';
 
-	// ===== OPENCV SETUP =====
 	let opencvLoaded = false;
 	onMount(async () => {
 		if (opencvLoaded) return;
 		try {
-			// Check if script already exists
 			if (document.getElementById('opencv-script')) {
 				opencvLoaded = true;
 				return;
@@ -37,38 +35,68 @@
 		}
 	});
 
-	// ===== EXPORTED FUNCTION FOR ANNOTATOR TO CALL =====
-	export function processImageWithEllipse() {
-		// Get latest state from store
+	// This function is for the final analysis
+	export function processImageWithAnnotation() {
 		const state = $imageAnalysisStore;
 		const imageToProcess = state.croppedImage || state.capturedImage;
-		const ellipse = state.ellipsePriors;
+		const annotation = state.annotation;
 
 		if (!opencvLoaded) {
 			alert('OpenCV is still loading. Please wait a moment and try again.');
 			return;
 		}
-		if (!imageToProcess || !ellipse) {
+		if (!imageToProcess || !annotation) {
 			alert('Missing image or annotation data.');
 			return;
 		}
-
-		updateProcessingResults(null, true); // Set isProcessing to true
+		
+		// Set processing to true before starting
+		setProcessing(true);
 
 		const img = new Image();
 		img.onload = () => {
 			try {
-				const results = analyzeLeafAreaInEllipse(img, ellipse);
-				updateProcessingResults(results, false); // Update with results, set isProcessing to false
+				const results = analyzeLeafAreaInEllipse(img, annotation);
+				// This will log results, stop processing, AND move to the results page
+				updateProcessingResults(results);
 			} catch (error) {
-				updateProcessingResults({ error: `Processing error: ${error}` }, false);
+				updateProcessingResults({ error: `Processing error: ${error}` });
 			}
 		};
 		img.onerror = () => {
-			updateProcessingResults({ error: 'Failed to load image for processing.' }, false);
+			updateProcessingResults({ error: 'Failed to load image for processing.' });
 		};
 		img.src = imageToProcess;
 	}
-</script>
+	
+	// This function is for the intermediate refinement step
+	export async function refineCurrentAnnotation() {
+		const state = $imageAnalysisStore;
+		const imageToProcess = state.croppedImage || state.capturedImage;
+		const currentAnnotation = state.annotation;
 
-<!-- This component now has no visible UI. It's a background worker. -->
+		if (!opencvLoaded || !imageToProcess || !currentAnnotation) {
+			alert('Cannot refine: Missing image or initial annotation.');
+			return;
+		}
+
+		// UPDATED: Use the safe function to show the spinner
+		setProcessing(true);
+
+		setTimeout(() => {
+			const img = new Image();
+			img.onload = () => {
+				try {
+					const refinedAnnotation = refineEllipseSelection(img, currentAnnotation);
+					updateAnnotation(refinedAnnotation);
+				} catch (error) {
+					console.error("Refinement failed:", error);
+				} finally {
+					// UPDATED: Use the safe function to hide the spinner
+					setProcessing(false);
+				}
+			};
+			img.src = imageToProcess;
+		}, 50);
+	}
+</script>

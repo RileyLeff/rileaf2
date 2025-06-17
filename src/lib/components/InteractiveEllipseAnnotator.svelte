@@ -1,37 +1,42 @@
 <!-- src/lib/components/InteractiveEllipseAnnotator.svelte -->
 <script lang="ts">
-	import { imageAnalysisStore, updateEllipsePriors } from '$lib/stores/imageAnalysis';
-	import type { Ellipse } from '$lib/stores/imageAnalysis';
+	import { imageAnalysisStore, updateAnnotation } from '$lib/stores/imageAnalysis';
+	import type { Ellipse, Annotation } from '$lib/stores/imageAnalysis';
+	// REFACTORED: Import helper functions from our new utility module
+	import { drawEllipse, drawHandles, getEventCoords } from '$lib/utils/canvasUtils';
 
 	export let imageProcessor: any;
 
 	// ===== STATE =====
 	$: annotationImage = $imageAnalysisStore.croppedImage || $imageAnalysisStore.capturedImage;
+	$: annotation = $imageAnalysisStore.annotation;
 
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D | null;
 	let backgroundImage: HTMLImageElement | null;
 	let ellipse: Ellipse;
 
-	// Interaction state
 	let isDragging = false;
 	let activeHandle: 'center' | 'rx' | 'ry' | 'rotate' | null = null;
 	let dragStart = { x: 0, y: 0 };
 	let initialEllipse: Ellipse;
-
-	// FIX: This guard prevents the initialization from running on every state change.
 	let lastLoadedUrl: string | null = null;
 
 	// ===== LIFECYCLE & INITIALIZATION =====
 	$: if (annotationImage && canvas && annotationImage !== lastLoadedUrl) {
 		loadImageAndInitialize(annotationImage);
 	}
+	
+	$: if(annotation && ellipse !== annotation.ellipse) {
+		ellipse = annotation.ellipse;
+		redrawCanvas();
+	}
 
 	function loadImageAndInitialize(imageUrl: string) {
-		lastLoadedUrl = imageUrl; // Mark this image as loaded
+		lastLoadedUrl = imageUrl;
 		ctx = canvas.getContext('2d');
 		if (!ctx) return;
-
+		
 		const img = new Image();
 		img.onload = () => {
 			backgroundImage = img;
@@ -39,80 +44,44 @@
 			canvas.width = 800;
 			canvas.height = canvas.width * aspectRatio;
 
-			// This is the initialization that was causing the "snap-back".
-			// It will now only run once per new image.
-			ellipse = {
-				cx: canvas.width / 2, cy: canvas.height / 2,
-				rx: canvas.width / 4, ry: canvas.width / 4,
-				angle: 0
-			};
+			ellipse = { cx: canvas.width / 2, cy: canvas.height / 2, rx: canvas.width / 4, ry: canvas.width / 4, angle: 0 };
+			saveAnnotation();
 			redrawCanvas();
 		};
-		img.onerror = () => console.error('Annotator failed to load image');
 		img.src = imageUrl;
 	}
-
-	// ===== DRAWING LOGIC =====
+	
+	// ===== DRAWING LOGIC (Now simplified) =====
 	function redrawCanvas() {
 		if (!ctx || !canvas || !backgroundImage || !ellipse) return;
-
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
-
-		ctx.strokeStyle = '#44ff44';
-		ctx.lineWidth = 3;
-		ctx.beginPath();
-		ctx.ellipse(ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.angle, 0, 2 * Math.PI);
-		ctx.stroke();
-
-		drawHandles();
+		// REFACTORED: Use imported helper functions
+		drawEllipse(ctx, ellipse);
+		drawHandles(ctx, ellipse);
 	}
 
-	function getHandlePositions() {
-		const { cx, cy, rx, ry, angle } = ellipse;
-		const cosA = Math.cos(angle);
-		const sinA = Math.sin(angle);
-		return {
-			center: { x: cx, y: cy },
-			rx: { x: cx + rx * cosA, y: cy + rx * sinA },
-			ry: { x: cx - ry * sinA, y: cy + ry * cosA },
-			rotate: { x: cx + rx * cosA * 1.2, y: cy + rx * sinA * 1.2 }
-		};
-	}
-
-	function drawHandles() {
-		if (!ctx) return;
-		const handles = getHandlePositions();
-		ctx.fillStyle = '#44ff44';
-
-		Object.values(handles).forEach((pos) => {
-			ctx.beginPath();
-			ctx.arc(pos.x, pos.y, 8, 0, 2 * Math.PI);
-			ctx.fill();
-		});
-	}
-	
-    // ===== INTERACTION LOGIC =====
-	function getEventCoords(event: MouseEvent | Touch) {
-		const rect = canvas.getBoundingClientRect();
-		const scaleX = canvas.width / rect.width;
-		const scaleY = canvas.height / rect.height;
-		return { x: (event.clientX - rect.left) * scaleX, y: (event.clientY - rect.top) * scaleY };
-	}
-
+	// ===== INTERACTION LOGIC (Simplified handleStart) =====
 	function handleStart(event: MouseEvent | TouchEvent) {
 		event.preventDefault();
 		const touch = 'touches' in event ? event.touches[0] : event;
-		const coords = getEventCoords(touch);
-		const handles = getHandlePositions();
-		const handleRadius = 15;
+		const coords = getEventCoords(touch, canvas); // Uses helper
+		
+		// Use a local copy of handle positions for hit-testing
+		const handles = {
+			center: { x: ellipse.cx, y: ellipse.cy },
+			rx: { x: ellipse.cx + ellipse.rx * Math.cos(ellipse.angle), y: ellipse.cy + ellipse.rx * Math.sin(ellipse.angle) },
+			ry: { x: ellipse.cx - ellipse.ry * Math.sin(ellipse.angle), y: ellipse.cy + ellipse.ry * Math.cos(ellipse.angle) },
+			rotate: { x: ellipse.cx + ellipse.rx * Math.cos(ellipse.angle) * 1.2, y: ellipse.cy + ellipse.rx * Math.sin(ellipse.angle) * 1.2 }
+		};
 
+		const handleRadius = 15;
 		for (const [name, pos] of Object.entries(handles)) {
 			if (Math.hypot(coords.x - pos.x, coords.y - pos.y) < handleRadius) {
 				isDragging = true;
 				activeHandle = name as typeof activeHandle;
 				dragStart = coords;
-				initialEllipse = { ...ellipse }; // Capture state at the beginning of the drag
+				initialEllipse = { ...ellipse };
 				return;
 			}
 		}
@@ -122,10 +91,9 @@
 		if (!isDragging || !activeHandle) return;
 		event.preventDefault();
 		const touch = 'touches' in event ? event.touches[0] : event;
-		const coords = getEventCoords(touch);
+		const coords = getEventCoords(touch, canvas);
 		const dx = coords.x - dragStart.x;
 		const dy = coords.y - dragStart.y;
-
 		if (activeHandle === 'center') {
 			ellipse.cx = initialEllipse.cx + dx;
 			ellipse.cy = initialEllipse.cy + dy;
@@ -138,29 +106,42 @@
 			const sinA = Math.sin(-initialEllipse.angle);
 			const localX = (coords.x - initialEllipse.cx) * cosA - (coords.y - initialEllipse.cy) * sinA;
 			const localY = (coords.x - initialEllipse.cx) * sinA + (coords.y - initialEllipse.cy) * cosA;
-
-			if (activeHandle === 'rx') {
-				ellipse.rx = Math.max(5, Math.abs(localX));
-			} else if (activeHandle === 'ry') {
-				ellipse.ry = Math.max(5, Math.abs(localY));
-			}
+			if (activeHandle === 'rx') ellipse.rx = Math.max(5, Math.abs(localX));
+			else if (activeHandle === 'ry') ellipse.ry = Math.max(5, Math.abs(localY));
 		}
 		redrawCanvas();
 	}
 
 	function handleEnd() {
 		if (isDragging) {
-			updateEllipsePriors(ellipse);
 			isDragging = false;
 			activeHandle = null;
+			saveAnnotation();
 		}
 	}
 
+	// ===== WORKFLOW ACTIONS =====
 	function handleAnalyze() {
 		if (imageProcessor) {
-			updateEllipsePriors(ellipse);
-			imageProcessor.processImageWithEllipse();
+			saveAnnotation();
+			imageProcessor.processImageWithAnnotation();
 		}
+	}
+	
+	function handleRefine() {
+		if (imageProcessor) {
+			saveAnnotation(); 
+			imageProcessor.refineCurrentAnnotation();
+		}
+	}
+	
+	function saveAnnotation() {
+		if (!ellipse || !canvas) return;
+		const newAnnotation: Annotation = {
+			ellipse,
+			sourceDimensions: { width: canvas.width, height: canvas.height }
+		};
+		updateAnnotation(newAnnotation);
 	}
 </script>
 
@@ -179,16 +160,19 @@
 		></canvas>
 	</div>
 	<div class="controls">
-		<button class="analyze-button" on:click={handleAnalyze}> ✅ Analyze Leaf Area </button>
+		<button class="control-button refine-button" on:click={handleRefine}> ✨ Refine Selection </button>
+		<button class="control-button analyze-button" on:click={handleAnalyze}> ✅ Analyze Leaf Area </button>
 	</div>
 </div>
 
 <style>
-	/* Styles are unchanged */
 	.annotator-container { text-align: center; }
 	.canvas-wrapper { margin-bottom: 1rem; }
 	canvas { max-width: 100%; border-radius: 4px; border: 2px solid #ddd; cursor: pointer; touch-action: none; }
-	.controls { margin-top: 1rem; }
-	.analyze-button { padding: 12px 24px; font-size: 1.1rem; font-weight: bold; color: white; background-color: #4caf50; border: none; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
+	.controls { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
+	.control-button { padding: 12px 24px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
+	.refine-button { background-color: #f0f0f0; border: 1px solid #ccc; color: #333; }
+	.refine-button:hover { background-color: #e0e0e0; }
+	.analyze-button { background-color: #4caf50; color: white; }
 	.analyze-button:hover { background-color: #45a049; }
 </style>
