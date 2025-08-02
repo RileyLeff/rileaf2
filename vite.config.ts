@@ -10,7 +10,9 @@ export default defineConfig({
 		},
 		allowedHosts: [
 			'clean-marlin-rapidly.ngrok-free.app',
-			'7e09e2570aba.ngrok-free.app'
+			'7e09e2570aba.ngrok-free.app',
+			'ff3506a4e1c1.ngrok-free.app',
+			 'c8f713c0d512.ngrok-free.app'
 		]
 	},
 	test: {
