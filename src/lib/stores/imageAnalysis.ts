@@ -42,8 +42,8 @@ const initialState: ImageAnalysisState = {
 	appState: 'CAMERA',
 	capturedImage: null,
 	croppedImage: null,
-	clipDiameter: 25.0,
-	chamberDiameter: 20.0, // NEW: Default chamber diameter
+	clipDiameter: 45.0,
+	chamberDiameter: 27.6, // NEW: Default chamber diameter
 	annotation: null,
     // NEW: Default HSV range (a general bright green)
     hsvThresholds: {
