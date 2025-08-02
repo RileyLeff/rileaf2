@@ -73,7 +73,7 @@
 			rotate: { x: ellipse.cx + ellipse.rx * Math.cos(ellipse.angle) * 1.2, y: ellipse.cy + ellipse.rx * Math.sin(ellipse.angle) * 1.2 }
 		};
 
-		const handleRadius = 15;
+		const handleRadius = 30;
 		for (const [name, pos] of Object.entries(handles)) {
 			if (Math.hypot(coords.x - pos.x, coords.y - pos.y) < handleRadius) {
 				isDragging = true;

@@ -29,7 +29,7 @@ export function drawHandles(ctx: CanvasRenderingContext2D, ellipse: Ellipse) {
 
 	Object.values(handles).forEach((pos) => {
 		ctx.beginPath();
-		ctx.arc(pos.x, pos.y, 8, 0, 2 * Math.PI);
+		ctx.arc(pos.x, pos.y, 24, 0, 2 * Math.PI);
 		ctx.fill();
 	});
 }
